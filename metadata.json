@@ -1,0 +1,7 @@
+{
+  "name": "Copy of DamDam Laundry Payroll System",
+  "description": "A comprehensive payroll and attendance management system for DamDam Laundry with geofencing capabilities and weekly salary calculations.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
