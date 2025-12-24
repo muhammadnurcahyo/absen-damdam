@@ -78,15 +78,23 @@ const App: React.FC = () => {
   const handleClockIn = (lat: number, lng: number) => {
     if (!currentUser) return;
     const now = new Date();
+    const clockInTime = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false });
+    
+    // Check for lateness
+    const [nowH, nowM] = clockInTime.split(':').map(Number);
+    const [targetH, targetM] = outletConfig.clockInTime.split(':').map(Number);
+    const isLate = (nowH > targetH) || (nowH === targetH && nowM > targetM);
+
     const newRecord: AttendanceRecord = {
       id: Math.random().toString(36).substr(2, 9),
       userId: currentUser.id,
       date: now.toISOString().split('T')[0],
-      clockIn: now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+      clockIn: clockInTime,
       clockOut: null,
       latitude: lat,
       longitude: lng,
-      status: 'PRESENT'
+      status: 'PRESENT',
+      isLate: isLate
     };
     setAttendance(prev => [...prev, newRecord]);
   };
@@ -94,7 +102,7 @@ const App: React.FC = () => {
   const handleClockOut = () => {
     if (!currentUser) return;
     const today = new Date().toISOString().split('T')[0];
-    const now = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+    const now = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false });
     setAttendance(prev => prev.map(a => 
       (a.userId === currentUser.id && a.date === today) ? { ...a, clockOut: now } : a
     ));
@@ -117,7 +125,6 @@ const App: React.FC = () => {
     if (status === 'APPROVED') {
       const leave = leaveRequests.find(l => l.id === leaveId);
       if (leave) {
-        // Hapus absensi yang mungkin ada di tanggal tersebut jika ada (timpa dengan status LEAVE)
         setAttendance(prev => {
           const filtered = prev.filter(a => !(a.userId === leave.userId && a.date === leave.date));
           const leaveRecord: AttendanceRecord = {

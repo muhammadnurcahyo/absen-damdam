@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { User, AttendanceRecord, LeaveRequest, OutletConfig } from '../types';
 import { getCurrentPosition, calculateDistance } from '../services/locationService';
 import { FREE_LEAVE_QUOTA } from '../constants';
+import { calculateWeeklyPayroll } from '../services/payrollService';
 
 interface EmployeeDashboardProps {
   user: User;
@@ -44,26 +45,35 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
     return Math.max(0, FREE_LEAVE_QUOTA - approvedLeaves);
   };
 
+  const getStats = () => {
+    const userAttendance = attendance.filter(a => a.userId === user.id);
+    const onTime = userAttendance.filter(a => a.status === 'PRESENT' && !a.isLate).length;
+    const late = userAttendance.filter(a => a.status === 'PRESENT' && a.isLate).length;
+    const totalIzin = leaveRequests.filter(l => l.userId === user.id && l.status === 'APPROVED').length;
+    return { onTime, late, totalIzin };
+  };
+
   const getMergedHistory = () => {
     const userAttendance = attendance.filter(a => a.userId === user.id);
     const userLeaves = leaveRequests.filter(l => l.userId === user.id);
 
     const history: any[] = [];
 
-    // Add normal attendance
     userAttendance.forEach(a => {
+      let statusLabel = a.status === 'PRESENT' ? 'HADIR' : 'ABSEN';
+      if (a.status === 'PRESENT' && a.isLate) statusLabel = 'TERLAMBAT';
+      
       history.push({
         date: a.date,
         clockIn: a.clockIn,
         clockOut: a.clockOut,
-        statusText: a.status === 'PRESENT' ? 'HADIR' : 'ABSEN',
+        statusText: statusLabel,
+        isLate: a.isLate,
         rawDate: new Date(a.date)
       });
     });
 
-    // Add leaves (including pending)
     userLeaves.forEach(l => {
-      // Avoid duplication if an attendance record already exists for the same date (though logically it shouldn't for a leave)
       const existing = history.find(h => h.date === l.date);
       if (!existing) {
         let statusText = 'IZIN (PENDING)';
@@ -81,6 +91,58 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
     });
 
     return history.sort((a, b) => b.rawDate.getTime() - a.rawDate.getTime());
+  };
+
+  const handleDownloadSlip = () => {
+    const { jsPDF } = (window as any).jspdf;
+    const todayDate = new Date();
+    const weekEnd = new Date(todayDate);
+    const weekStart = new Date(todayDate);
+    weekStart.setDate(todayDate.getDate() - 6);
+
+    const monthRecords = attendance.filter(a => a.userId === user.id);
+    const report = calculateWeeklyPayroll(user, attendance.filter(a => a.userId === user.id), monthRecords, weekStart, weekEnd);
+
+    const doc = new jsPDF();
+    doc.setFontSize(22);
+    doc.setTextColor(79, 70, 229);
+    doc.text("DamDam Laundry", 105, 20, { align: 'center' });
+    doc.setFontSize(12);
+    doc.setTextColor(100);
+    doc.text("SLIP GAJI MINGGUAN KARYAWAN", 105, 28, { align: 'center' });
+    doc.line(14, 35, 196, 35);
+
+    doc.setFontSize(10);
+    doc.setTextColor(50);
+    doc.text(`Nama Karyawan: ${user.name}`, 14, 45);
+    doc.text(`Username: @${user.username}`, 14, 51);
+    doc.text(`Periode: ${report.weekStartDate} s/d ${report.weekEndDate}`, 14, 57);
+
+    const attDeduction = report.excessLeaveCount * report.dailyRate;
+    const deductionLabel = user.uangMakan > 0 ? 'Potongan Uang Makan' : 'Potongan Gaji Pokok';
+
+    (doc as any).autoTable({
+      startY: 65,
+      head: [['DESKRIPSI', 'KETERANGAN', 'JUMLAH']],
+      body: [
+        ['Gaji Kotor (Gapok + Makan)', 'Mingguan (7 Hari)', `Rp ${report.grossSalary.toLocaleString('id-ID')}`],
+        ['Bonus Mingguan', 'Dari Owner', `Rp ${report.bonus.toLocaleString('id-ID')}`],
+        [deductionLabel, `${report.excessLeaveCount} Hari (>3x)`, `Rp ${attDeduction.toLocaleString('id-ID')}`],
+        ['Potongan Lainnya', 'Manual', `Rp ${report.manualDeduction.toLocaleString('id-ID')}`],
+      ],
+      theme: 'grid',
+      headStyles: { fillColor: [79, 70, 229] },
+    });
+
+    const finalY = (doc as any).lastAutoTable.finalY + 15;
+    doc.setFontSize(14);
+    doc.setFont(undefined, 'bold');
+    doc.setTextColor(0);
+    doc.text("TOTAL GAJI DITERIMA", 14, finalY);
+    doc.setTextColor(79, 70, 229);
+    doc.text(`Rp ${report.netSalary.toLocaleString('id-ID')}`, 196, finalY, { align: 'right' });
+
+    doc.save(`slip_gaji_${user.username}_${report.weekEndDate}.pdf`);
   };
 
   const handleClockInAction = async () => {
@@ -108,11 +170,11 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
   };
 
   const sisaLibur = getRemainingLeave();
+  const stats = getStats();
   const mergedHistory = getMergedHistory();
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-      {/* Kolom Aksi - Tema Putih */}
       <div className="lg:col-span-5 space-y-8">
         <div className="bg-white p-12 rounded-[48px] border border-slate-100 shadow-sm text-center">
           <div className="w-24 h-24 bg-indigo-50 text-indigo-600 rounded-[32px] flex items-center justify-center mx-auto mb-8 text-4xl shadow-sm rotate-6 hover:rotate-0 transition-all duration-500">
@@ -152,21 +214,33 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-              <div className="p-5 bg-white rounded-3xl border border-slate-100 flex flex-col items-center">
-                <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Sisa Jatah Libur</p>
-                <p className="text-2xl font-black text-indigo-600">{sisaLibur}x</p>
+          <div className="grid grid-cols-3 gap-3 mb-8">
+              <div className="p-4 bg-white rounded-2xl border border-slate-100 flex flex-col items-center">
+                <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Tepat Waktu</p>
+                <p className="text-lg font-black text-green-600">{stats.onTime}</p>
               </div>
-              <div className="p-5 bg-white rounded-3xl border border-slate-100 flex flex-col items-center">
-                <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Status Lokasi</p>
-                <p className="text-2xl font-black text-slate-900">{distance ? 'OK' : '--'}</p>
+              <div className="p-4 bg-white rounded-2xl border border-slate-100 flex flex-col items-center">
+                <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Terlambat</p>
+                <p className="text-lg font-black text-yellow-600">{stats.late}</p>
+              </div>
+              <div className="p-4 bg-white rounded-2xl border border-slate-100 flex flex-col items-center">
+                <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Izin Diacc</p>
+                <p className="text-lg font-black text-purple-600">{stats.totalIzin}</p>
               </div>
           </div>
+
+          <button 
+            onClick={handleDownloadSlip}
+            className="w-full py-4 border-2 border-indigo-100 text-indigo-600 rounded-3xl font-black text-sm uppercase tracking-widest hover:bg-indigo-50 transition-all mb-4"
+          >
+            Unduh Slip Gaji Minggu Ini
+          </button>
+
+          <p className="text-[10px] font-black text-slate-300 uppercase">Jatah Libur: {sisaLibur} / {FREE_LEAVE_QUOTA}x Sebulan</p>
 
           {errorLoc && <p className="mt-6 text-xs font-bold text-red-500 bg-red-50 p-4 rounded-2xl border border-red-100">{errorLoc}</p>}
         </div>
 
-        {/* Form Izin - Putih Terang */}
         <div className="bg-white p-10 rounded-[48px] border border-slate-100 shadow-sm">
           <h3 className="font-black text-2xl text-slate-900 mb-8 flex items-center">
              <span className="w-2 h-6 bg-purple-500 rounded-full mr-3"></span>
@@ -175,19 +249,17 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
           <div className="space-y-5">
             <div className="space-y-2">
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">Kapan Anda Berencana Libur?</label>
-                <div className="relative">
-                  <input 
+                <input 
                   type="date" value={leaveDate} onChange={e => setLeaveDate(e.target.value)}
                   className="w-full p-5 bg-slate-50 border border-slate-100 rounded-3xl outline-none focus:ring-2 focus:ring-purple-500 font-black text-slate-700 transition-all appearance-none"
                   min={today}
-                  />
-                </div>
+                />
             </div>
             <div className="space-y-2">
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">Apa Alasan Anda?</label>
                 <textarea 
-                placeholder="Berikan alasan yang jelas..." value={leaveReason} onChange={e => setLeaveReason(e.target.value)}
-                className="w-full p-5 bg-slate-50 border border-slate-100 rounded-3xl outline-none focus:ring-2 focus:ring-purple-500 min-h-[140px] font-medium text-slate-700"
+                  placeholder="Berikan alasan yang jelas..." value={leaveReason} onChange={e => setLeaveReason(e.target.value)}
+                  className="w-full p-5 bg-slate-50 border border-slate-100 rounded-3xl outline-none focus:ring-2 focus:ring-purple-500 min-h-[140px] font-medium text-slate-700"
                 />
             </div>
             <button 
@@ -200,7 +272,6 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
         </div>
       </div>
 
-      {/* Kolom Riwayat Kehadiran */}
       <div className="lg:col-span-7 space-y-8">
         <div className="bg-white p-10 rounded-[48px] border border-slate-100 shadow-sm min-h-[700px]">
           <h2 className="text-2xl font-black text-slate-900 mb-10 flex items-center">
@@ -230,6 +301,7 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
                     <td className="py-6 pr-4">
                       <span className={`px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-wider ${
                         item.statusText === 'HADIR' ? 'bg-green-100 text-green-700' : 
+                        item.statusText === 'TERLAMBAT' ? 'bg-yellow-100 text-yellow-700' : 
                         item.statusText.includes('IZIN') ? 'bg-purple-100 text-purple-700' : 'bg-red-100 text-red-700'
                       }`}>
                         {item.statusText}

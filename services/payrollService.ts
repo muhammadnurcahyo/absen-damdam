@@ -13,7 +13,6 @@ export const calculateWeeklyPayroll = (
 ): PayrollReport => {
   const dailyGapok = user.gapok / DAYS_IN_MONTH;
   const dailyUangMakan = user.uangMakan / DAYS_IN_MONTH;
-  const dailyRateTotal = dailyGapok + dailyUangMakan;
   
   const weekRecords = records.filter(r => {
     const d = new Date(r.date);
@@ -29,7 +28,7 @@ export const calculateWeeklyPayroll = (
   const sortedMonthRecords = [...allRecordsThisMonth].sort((a, b) => a.date.localeCompare(b.date));
   
   sortedMonthRecords.forEach(r => {
-    if (r.status === 'LEAVE') {
+    if (r.status === 'LEAVE' || r.status === 'ABSENT') {
       runningLeaveCount++;
       const rDate = new Date(r.date);
       if (runningLeaveCount > FREE_LEAVE_QUOTA && rDate >= weekStart && rDate <= weekEnd) {
@@ -38,15 +37,21 @@ export const calculateWeeklyPayroll = (
     }
   });
 
-  const weeklyBase = dailyRateTotal * 7;
-  const deductionForExcessLeave = excessLeaveCount * dailyRateTotal;
+  const weeklyBase = (dailyGapok + dailyUangMakan) * 7;
+  
+  // LOGIKA BARU: Potong uang makan dulu, jika 0 baru potong gapok
+  let attendanceDeduction = 0;
+  const dailyDeductionRate = user.uangMakan > 0 ? dailyUangMakan : dailyGapok;
+  attendanceDeduction = excessLeaveCount * dailyDeductionRate;
   
   const totalSlots = 7;
   const recordedCount = presentCount + leaveCount;
   const absentCount = Math.max(0, totalSlots - recordedCount);
-  const absenceDeduction = absentCount * dailyRateTotal;
+  
+  // Absen tanpa keterangan juga mengikuti logika potongan yang sama
+  const absenceDeduction = absentCount * dailyDeductionRate;
 
-  const totalDeductions = deductionForExcessLeave + absenceDeduction + manualDeduction;
+  const totalDeductions = attendanceDeduction + absenceDeduction + manualDeduction;
   const netSalary = Math.max(0, weeklyBase + bonus - totalDeductions);
 
   return {
@@ -61,6 +66,7 @@ export const calculateWeeklyPayroll = (
     bonus,
     manualDeduction,
     deductions: totalDeductions,
-    netSalary: netSalary
+    netSalary: netSalary,
+    dailyRate: dailyDeductionRate // Menyimpan rate potongan yang digunakan
   };
 };

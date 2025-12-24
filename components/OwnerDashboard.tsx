@@ -111,37 +111,48 @@ const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
     doc.save(`absensi_damdam_${attStartDate}_to_${attEndDate}.pdf`);
   };
 
-  const exportPayrollToPDF = () => {
+  const exportIndividualSlipPDF = (emp: User) => {
     const { jsPDF } = (window as any).jspdf;
+    const report = getPayrollForUser(emp);
     const doc = new jsPDF();
-    doc.setFontSize(18);
-    doc.text("Laporan Payroll DamDam Laundry", 14, 20);
-    doc.setFontSize(10);
+    
+    doc.setFontSize(22);
+    doc.setTextColor(79, 70, 229);
+    doc.text("DamDam Laundry", 105, 20, { align: 'center' });
+    doc.setFontSize(12);
     doc.setTextColor(100);
-    doc.text(`Periode Penggajian: ${payStartDate} s/d ${payEndDate}`, 14, 28);
-
-    const payrollData = employees
-      .filter(e => e.role === UserRole.EMPLOYEE)
-      .map(emp => {
-        const report = getPayrollForUser(emp);
-        return [
-          emp.name,
-          `Rp ${report.grossSalary.toLocaleString('id-ID')}`,
-          `Rp ${report.bonus.toLocaleString('id-ID')}`,
-          `Rp ${report.deductions.toLocaleString('id-ID')}`,
-          `Rp ${report.netSalary.toLocaleString('id-ID')}`
-        ];
-      });
+    doc.text("SLIP GAJI MINGGUAN", 105, 28, { align: 'center' });
+    doc.line(14, 35, 196, 35);
+    
+    doc.setFontSize(10);
+    doc.setTextColor(50);
+    doc.text(`Nama: ${emp.name}`, 14, 45);
+    doc.text(`Periode: ${payStartDate} s/d ${payEndDate}`, 14, 51);
+    doc.text(`Potongan Per Hari: Rp ${Math.round(report.dailyRate).toLocaleString('id-ID')}`, 14, 57);
+    
+    const attDeduction = report.excessLeaveCount * report.dailyRate;
+    const deductionLabel = emp.uangMakan > 0 ? 'Potongan Uang Makan' : 'Potongan Gaji Pokok';
 
     (doc as any).autoTable({
-      startY: 35,
-      head: [['Nama Karyawan', 'Gaji Pokok+Makan', 'Bonus', 'Potongan', 'Gaji Bersih']],
-      body: payrollData,
-      theme: 'striped',
+      startY: 65,
+      head: [['DESKRIPSI', 'KETERANGAN', 'JUMLAH']],
+      body: [
+        ['Gaji Kotor (Gapok + Makan)', 'Mingguan (7 Hari)', `Rp ${report.grossSalary.toLocaleString('id-ID')}`],
+        ['Bonus Mingguan', 'Tambahan Owner', `Rp ${report.bonus.toLocaleString('id-ID')}`],
+        [deductionLabel, `${report.excessLeaveCount} Hari (>3x)`, `Rp ${attDeduction.toLocaleString('id-ID')}`],
+        ['Potongan Lainnya', 'Manual', `Rp ${report.manualDeduction.toLocaleString('id-ID')}`],
+      ],
+      theme: 'grid',
       headStyles: { fillColor: [79, 70, 229] },
     });
-
-    doc.save(`payroll_damdam_${payEndDate}.pdf`);
+    
+    const finalY = (doc as any).lastAutoTable.finalY + 15;
+    doc.setFontSize(14);
+    doc.setFont(undefined, 'bold');
+    doc.text("TOTAL TAKE HOME PAY", 14, finalY);
+    doc.text(`Rp ${report.netSalary.toLocaleString('id-ID')}`, 196, finalY, { align: 'right' });
+    
+    doc.save(`slip_${emp.username}.pdf`);
   };
 
   const getMergedAttendance = () => {
@@ -161,7 +172,9 @@ const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
     const combined: any[] = [];
     
     dailyAtt.forEach(a => {
-      combined.push({ ...a, type: 'ATTENDANCE', statusText: a.status === 'PRESENT' ? 'HADIR' : 'ABSEN' });
+      let statusText = a.status === 'PRESENT' ? 'HADIR' : 'ABSEN';
+      if (a.status === 'PRESENT' && a.isLate) statusText = 'TERLAMBAT';
+      combined.push({ ...a, type: 'ATTENDANCE', statusText });
     });
 
     dailyLeaves.forEach(l => {
@@ -254,11 +267,6 @@ const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                       </div>
                     );
                 })}
-                {leaveRequests.filter(l => l.status === 'PENDING').length === 0 && (
-                  <div className="text-center py-16 bg-white border-2 border-dashed border-slate-100 rounded-[40px]">
-                    <p className="text-slate-400 font-bold">Tidak ada pengajuan izin saat ini.</p>
-                  </div>
-                )}
               </div>
             </section>
           </div>
@@ -276,29 +284,26 @@ const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
               </button>
             </div>
             <div className="overflow-x-auto border border-slate-50 rounded-[32px] shadow-sm">
-              <table className="w-full text-left border-collapse">
+              <table className="w-full text-left">
                 <thead className="bg-slate-50 border-b border-slate-100 text-[10px] font-black uppercase text-slate-400 tracking-widest">
                   <tr>
-                    <th className="px-8 py-6">Nama & Info</th>
-                    <th className="px-8 py-6">Sisa Libur</th>
-                    <th className="px-8 py-6">Gapok / Bln</th>
-                    <th className="px-8 py-6">Uang Makan / Bln</th>
+                    <th className="px-8 py-6">Nama</th>
+                    <th className="px-8 py-6">Username</th>
+                    <th className="px-8 py-6">Gaji Pokok</th>
+                    <th className="px-8 py-6">Uang Makan</th>
                     <th className="px-8 py-6 text-right">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50 text-sm">
                   {employees.filter(e => e.role === UserRole.EMPLOYEE).map(e => (
-                    <tr key={e.id} className="hover:bg-slate-50/30 transition-colors group">
-                      <td className="px-8 py-6">
-                        <p className="font-black text-slate-800">{e.name}</p>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">@{e.username}</p>
-                      </td>
-                      <td className="px-8 py-6 font-black text-indigo-600">{getRemainingLeave(e.id)} / {FREE_LEAVE_QUOTA}x</td>
+                    <tr key={e.id} className="hover:bg-slate-50/30 transition-colors">
+                      <td className="px-8 py-6 font-black text-slate-800">{e.name}</td>
+                      <td className="px-8 py-6 text-slate-500 font-bold">@{e.username}</td>
                       <td className="px-8 py-6 text-slate-600 font-bold italic">Rp {e.gapok.toLocaleString('id-ID')}</td>
                       <td className="px-8 py-6 text-slate-600 font-bold italic">Rp {e.uangMakan.toLocaleString('id-ID')}</td>
                       <td className="px-8 py-6 text-right space-x-4">
-                        <button onClick={() => { setEditingEmp(e); setEmpForm(e); setShowEmpModal(true); }} className="text-indigo-600 font-black text-xs hover:bg-indigo-50 px-3 py-1 rounded-lg">Edit</button>
-                        <button onClick={() => onDeleteEmployee(e.id)} className="text-red-500 font-black text-xs hover:bg-red-50 px-3 py-1 rounded-lg">Hapus</button>
+                        <button onClick={() => { setEditingEmp(e); setEmpForm(e); setShowEmpModal(true); }} className="text-indigo-600 font-black text-xs">Edit</button>
+                        <button onClick={() => onDeleteEmployee(e.id)} className="text-red-500 font-black text-xs">Hapus</button>
                       </td>
                     </tr>
                   ))}
@@ -314,11 +319,11 @@ const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Dari Tanggal</label>
-                  <input type="date" value={attStartDate} onChange={(e) => setAttStartDate(e.target.value)} className="w-full p-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-black text-slate-700 shadow-sm" />
+                  <input type="date" value={attStartDate} onChange={(e) => setAttStartDate(e.target.value)} className="w-full p-4 bg-white border border-slate-200 rounded-2xl outline-none font-black text-slate-700 shadow-sm" />
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Sampai Tanggal</label>
-                  <input type="date" value={attEndDate} onChange={(e) => setAttEndDate(e.target.value)} className="w-full p-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-black text-slate-700 shadow-sm" />
+                  <input type="date" value={attEndDate} onChange={(e) => setAttEndDate(e.target.value)} className="w-full p-4 bg-white border border-slate-200 rounded-2xl outline-none font-black text-slate-700 shadow-sm" />
                 </div>
               </div>
               <button onClick={exportAttendanceToPDF} className="bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center h-[58px]">
@@ -338,14 +343,13 @@ const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50 text-sm">
-                  {getMergedAttendance().length === 0 && (<tr><td colSpan={5} className="px-8 py-20 text-center text-slate-400 font-bold italic">Tidak ada aktivitas pada rentang ini.</td></tr>)}
                   {getMergedAttendance().map((item, idx) => (
                     <tr key={idx} className="hover:bg-slate-50/30 transition-colors">
                       <td className="px-8 py-6 font-black text-slate-800">{employees.find(e => e.id === item.userId)?.name}</td>
                       <td className="px-8 py-6 text-slate-500 font-bold">{item.date}</td>
                       <td className="px-8 py-6 text-slate-500 font-bold">{item.clockIn || '--'}</td>
                       <td className="px-8 py-6 text-slate-500 font-bold">{item.clockOut || '--'}</td>
-                      <td className="px-8 py-6"><span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${item.statusText === 'HADIR' ? 'bg-green-100 text-green-700' : item.statusText.includes('IZIN') ? 'bg-purple-100 text-purple-700' : 'bg-red-100 text-red-700'}`}>{item.statusText}</span></td>
+                      <td className="px-8 py-6"><span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${item.statusText === 'HADIR' ? 'bg-green-100 text-green-700' : item.statusText === 'TERLAMBAT' ? 'bg-yellow-100 text-yellow-700' : item.statusText.includes('IZIN') ? 'bg-purple-100 text-purple-700' : 'bg-red-100 text-red-700'}`}>{item.statusText}</span></td>
                     </tr>
                   ))}
                 </tbody>
@@ -362,21 +366,14 @@ const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Awal Periode</label>
-                      <input type="date" value={payStartDate} onChange={(e) => setPayStartDate(e.target.value)} className="w-full p-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-black text-slate-700 shadow-sm" />
+                      <input type="date" value={payStartDate} onChange={(e) => setPayStartDate(e.target.value)} className="w-full p-4 bg-white border border-slate-200 rounded-2xl outline-none font-black text-slate-700 shadow-sm" />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Akhir Periode (Payday)</label>
-                      <input type="date" value={payEndDate} onChange={(e) => setPayEndDate(e.target.value)} className="w-full p-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-black text-slate-700 shadow-sm" />
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Akhir Periode</label>
+                      <input type="date" value={payEndDate} onChange={(e) => setPayEndDate(e.target.value)} className="w-full p-4 bg-white border border-slate-200 rounded-2xl outline-none font-black text-slate-700 shadow-sm" />
                     </div>
                   </div>
                </div>
-               <button onClick={exportPayrollToPDF} className="bg-red-600 text-white px-10 py-4 rounded-2xl font-black shadow-xl shadow-red-100 hover:bg-red-700 transition-all flex items-center h-[58px]">
-                 <span className="mr-2 text-lg">📂</span> EXPORT PAYROLL
-               </button>
-            </div>
-
-            <div className="p-6 bg-indigo-50 border border-indigo-100 rounded-3xl text-indigo-700 text-sm font-medium">
-                Gaji dihitung per hari berdasarkan Gaji Bulanan / {DAYS_IN_MONTH}. Masukkan bonus & potongan untuk periode terpilih.
             </div>
 
             <div className="space-y-6">
@@ -391,6 +388,7 @@ const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                         <div className="flex flex-wrap gap-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">
                            <span className="bg-slate-50 px-3 py-1 rounded-full">Hadir: <span className="text-indigo-600">{report.totalPresent}</span></span>
                            <span className="bg-slate-50 px-3 py-1 rounded-full">Izin: <span className="text-purple-600">{report.totalLeave}</span></span>
+                           <span className="bg-red-50 text-red-600 px-3 py-1 rounded-full">Potong Kuota: {report.excessLeaveCount} Hari</span>
                         </div>
                       </div>
                       <div className="flex items-center gap-10">
@@ -403,13 +401,14 @@ const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t border-slate-50">
                         <div className="space-y-2">
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Input Bonus</label>
-                          <input type="number" value={adj.bonus} onChange={(e) => handleAdjustmentChange(emp.id, 'bonus', e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-green-500 font-bold text-green-700" placeholder="Rp 0"/>
+                          <input type="number" value={adj.bonus} onChange={(e) => handleAdjustmentChange(emp.id, 'bonus', e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-green-700" placeholder="Rp 0"/>
                         </div>
                         <div className="space-y-2">
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Potongan Tambahan</label>
-                          <input type="number" value={adj.deduction} onChange={(e) => handleAdjustmentChange(emp.id, 'deduction', e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-red-500 font-bold text-red-700" placeholder="Rp 0"/>
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Potongan Manual</label>
+                          <input type="number" value={adj.deduction} onChange={(e) => handleAdjustmentChange(emp.id, 'deduction', e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-red-700" placeholder="Rp 0"/>
                         </div>
                     </div>
+                    <button onClick={() => exportIndividualSlipPDF(emp)} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-black transition-all">Download Slip Gaji Karyawan</button>
                   </div>
                 );
               })}
@@ -419,23 +418,33 @@ const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
 
         {activeMenu === 'settings' && (
           <div className="max-w-2xl space-y-10">
-            <h2 className="text-3xl font-black text-slate-900 tracking-tight">Titik Lokasi Laundry</h2>
+            <h2 className="text-3xl font-black text-slate-900 tracking-tight">Konfigurasi Operasional</h2>
             <div className="space-y-8 bg-white p-10 rounded-[40px] border border-slate-100 shadow-sm">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">Jam Masuk (Start)</label>
+                    <input type="time" value={tempConfig.clockInTime} onChange={e => setTempConfig({...tempConfig, clockInTime: e.target.value})} className="w-full p-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold text-slate-800"/>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">Jam Pulang (Finish)</label>
+                    <input type="time" value={tempConfig.clockOutTime} onChange={e => setTempConfig({...tempConfig, clockOutTime: e.target.value})} className="w-full p-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold text-slate-800"/>
+                  </div>
+              </div>
+              <div className="grid grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">Latitude</label>
-                    <input type="number" value={tempConfig.latitude} onChange={e => setTempConfig({...tempConfig, latitude: parseFloat(e.target.value)})} className="w-full p-5 bg-slate-50 border border-slate-100 rounded-3xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-slate-800"/>
+                    <input type="number" value={tempConfig.latitude} onChange={e => setTempConfig({...tempConfig, latitude: parseFloat(e.target.value)})} className="w-full p-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold text-slate-800"/>
                   </div>
                   <div className="space-y-2">
                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">Longitude</label>
-                    <input type="number" value={tempConfig.longitude} onChange={e => setTempConfig({...tempConfig, longitude: parseFloat(e.target.value)})} className="w-full p-5 bg-slate-50 border border-slate-100 rounded-3xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-slate-800"/>
+                    <input type="number" value={tempConfig.longitude} onChange={e => setTempConfig({...tempConfig, longitude: parseFloat(e.target.value)})} className="w-full p-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold text-slate-800"/>
                   </div>
               </div>
               <div className="space-y-2">
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">Radius Keamanan (Meter)</label>
-                <input type="number" value={tempConfig.radius} onChange={e => setTempConfig({...tempConfig, radius: parseInt(e.target.value)})} className="w-full p-5 bg-slate-50 border border-slate-100 rounded-3xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-slate-800"/>
+                <input type="number" value={tempConfig.radius} onChange={e => setTempConfig({...tempConfig, radius: parseInt(e.target.value)})} className="w-full p-5 bg-slate-50 border border-slate-100 rounded-3xl font-bold text-slate-800"/>
               </div>
-              <button onClick={() => onUpdateConfig(tempConfig)} className="w-full bg-slate-900 text-white py-5 rounded-3xl font-black hover:bg-black transition-all shadow-xl shadow-slate-100 active:scale-95">SIMPAN PENGATURAN LOKASI</button>
+              <button onClick={() => onUpdateConfig(tempConfig)} className="w-full bg-slate-900 text-white py-5 rounded-3xl font-black hover:bg-black transition-all shadow-xl shadow-slate-100 active:scale-95">SIMPAN PENGATURAN</button>
             </div>
           </div>
         )}
@@ -446,36 +455,35 @@ const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
           <div className="bg-white rounded-[40px] w-full max-w-lg p-10 shadow-2xl border border-slate-100">
             <div className="mb-10 text-center">
                 <h3 className="text-2xl font-black text-slate-900">{editingEmp ? 'Ubah Profil Karyawan' : 'Daftarkan Karyawan'}</h3>
-                <p className="text-slate-400 font-bold text-xs uppercase mt-1">Sistem Penggajian DamDam</p>
             </div>
             <div className="space-y-6">
               <div className="space-y-2">
                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">Nama Lengkap</label>
-                 <input placeholder="E.g. Siti Aminah" value={empForm.name} onChange={e => setEmpForm({...empForm, name: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold"/>
+                 <input placeholder="E.g. Siti Aminah" value={empForm.name} onChange={e => setEmpForm({...empForm, name: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none font-bold"/>
               </div>
               <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">Username</label>
-                    <input placeholder="username" value={empForm.username} onChange={e => setEmpForm({...empForm, username: e.target.value.toLowerCase().replace(/\s/g, '')})} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold"/>
+                    <input placeholder="username" value={empForm.username} onChange={e => setEmpForm({...empForm, username: e.target.value.toLowerCase().replace(/\s/g, '')})} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold"/>
                   </div>
                   <div className="space-y-2">
                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">Password</label>
-                    <input type="text" placeholder="Min. 6 Karakter" value={empForm.password} onChange={e => setEmpForm({...empForm, password: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold"/>
+                    <input type="text" placeholder="Min. 6 Karakter" value={empForm.password} onChange={e => setEmpForm({...empForm, password: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold"/>
                   </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">Gaji Pokok / Bulan</label>
-                  <input type="number" value={empForm.gapok} onChange={e => setEmpForm({...empForm, gapok: parseInt(e.target.value)})} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-black text-indigo-600"/>
+                  <input type="number" value={empForm.gapok} onChange={e => setEmpForm({...empForm, gapok: parseInt(e.target.value)})} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-indigo-600"/>
                 </div>
                 <div className="space-y-2">
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">Uang Makan / Bulan</label>
-                  <input type="number" value={empForm.uangMakan} onChange={e => setEmpForm({...empForm, uangMakan: parseInt(e.target.value)})} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-black text-green-600"/>
+                  <input type="number" value={empForm.uangMakan} onChange={e => setEmpForm({...empForm, uangMakan: parseInt(e.target.value)})} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-green-600"/>
                 </div>
               </div>
               <div className="flex space-x-4 pt-8">
-                <button onClick={() => setShowEmpModal(false)} className="flex-1 bg-white border border-slate-200 py-4 rounded-2xl font-black text-slate-400 hover:bg-slate-50 transition-all">BATAL</button>
-                <button onClick={() => { if (editingEmp) onEditEmployee({ ...editingEmp, ...empForm } as User); else onAddEmployee(empForm); setShowEmpModal(false); }} className="flex-1 bg-indigo-600 py-4 rounded-2xl font-black text-white hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all">SIMPAN DATA</button>
+                <button onClick={() => setShowEmpModal(false)} className="flex-1 bg-white border border-slate-200 py-4 rounded-2xl font-black text-slate-400">BATAL</button>
+                <button onClick={() => { if (editingEmp) onEditEmployee({ ...editingEmp, ...empForm } as User); else onAddEmployee(empForm); setShowEmpModal(false); }} className="flex-1 bg-indigo-600 py-4 rounded-2xl font-black text-white shadow-xl shadow-indigo-100 transition-all">SIMPAN DATA</button>
               </div>
             </div>
           </div>

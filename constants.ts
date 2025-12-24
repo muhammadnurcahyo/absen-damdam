@@ -5,6 +5,8 @@ export const INITIAL_OUTLET_CONFIG: OutletConfig = {
   latitude: -6.200000,
   longitude: 106.816666,
   radius: 100,
+  clockInTime: '08:00',
+  clockOutTime: '17:00',
 };
 
 export const MOCK_USERS: User[] = [

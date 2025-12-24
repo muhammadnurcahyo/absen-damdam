@@ -24,6 +24,7 @@ export interface AttendanceRecord {
   latitude: number;
   longitude: number;
   status: 'PRESENT' | 'LEAVE' | 'ABSENT';
+  isLate?: boolean;
 }
 
 export interface LeaveRequest {
@@ -38,6 +39,8 @@ export interface OutletConfig {
   latitude: number;
   longitude: number;
   radius: number; // In meters
+  clockInTime: string; // HH:mm format
+  clockOutTime: string; // HH:mm format
 }
 
 export interface PayrollReport {
@@ -53,4 +56,5 @@ export interface PayrollReport {
   bonus: number;
   manualDeduction: number;
   netSalary: number;
+  dailyRate: number;
 }
