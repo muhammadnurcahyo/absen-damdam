@@ -1,57 +1,80 @@
 
-import { User, AttendanceRecord, PayrollReport } from '../types';
-import { DAYS_IN_MONTH, FREE_LEAVE_QUOTA } from '../constants';
+import { User, AttendanceRecord, PayrollReport, PayrollMethod } from '../types';
+import { FREE_LEAVE_QUOTA, DAYS_IN_MONTH } from '../constants';
 
 export const calculateWeeklyPayroll = (
   user: User,
-  records: AttendanceRecord[],
-  allRecordsThisMonth: AttendanceRecord[],
+  records: AttendanceRecord[], 
+  allRecordsThisMonth: AttendanceRecord[], 
   weekStart: Date,
   weekEnd: Date,
   bonus: number = 0,
   manualDeduction: number = 0
 ): PayrollReport => {
+  const isDaily30 = user.payrollMethod === PayrollMethod.DAILY_30;
+  const methodLabel = isDaily30 ? 'Harian (Bagi 30)' : 'Mingguan (Bagi 4)';
+
+  // Perhitungan harian standar
   const dailyGapok = user.gapok / DAYS_IN_MONTH;
   const dailyUangMakan = user.uangMakan / DAYS_IN_MONTH;
+  const fullDailyRate = user.deductionRate || (dailyGapok + dailyUangMakan);
+
+  let weeklyBase = 0;
+  if (isDaily30) {
+    weeklyBase = (dailyGapok + dailyUangMakan) * 7;
+  } else {
+    weeklyBase = (user.gapok + user.uangMakan) / 4;
+  }
   
   const weekRecords = records.filter(r => {
     const d = new Date(r.date);
     return d >= weekStart && d <= weekEnd;
   });
 
-  const presentCount = weekRecords.filter(r => r.status === 'PRESENT').length;
-  const leaveCount = weekRecords.filter(r => r.status === 'LEAVE').length;
+  const presentRecords = weekRecords.filter(r => r.status === 'PRESENT');
+  const totalOnTime = presentRecords.filter(r => !r.isLate).length;
+  const totalLate = presentRecords.filter(r => r.isLate).length;
+  const leaveCountThisWeek = weekRecords.filter(r => r.status === 'LEAVE' || r.status === 'ABSENT').length;
 
-  let excessLeaveCount = 0;
-  let runningLeaveCount = 0;
-  
   const sortedMonthRecords = [...allRecordsThisMonth].sort((a, b) => a.date.localeCompare(b.date));
   
-  sortedMonthRecords.forEach(r => {
-    if (r.status === 'LEAVE' || r.status === 'ABSENT') {
-      runningLeaveCount++;
-      const rDate = new Date(r.date);
-      if (runningLeaveCount > FREE_LEAVE_QUOTA && rDate >= weekStart && rDate <= weekEnd) {
-        excessLeaveCount++;
+  let monthlyAbsentCounter = 0;
+  let totalDeductionsThisWeek = 0;
+  let excessLeaveCountThisWeek = 0;
+
+  // Logika Khusus: Dwi vs Lainnya (Mega)
+  // Asumsi identifikasi Dwi berdasarkan username atau ID '2'
+  const isDwi = user.id === '2' || user.username.toLowerCase().includes('dwi');
+
+  sortedMonthRecords.forEach(record => {
+    const isAbsentOrLeave = record.status === 'LEAVE' || record.status === 'ABSENT';
+    if (isAbsentOrLeave) {
+      monthlyAbsentCounter++;
+      
+      const recordDate = new Date(record.date);
+      // Hanya hitung potongan jika tanggal berada dalam rentang minggu payroll yang dipilih
+      if (recordDate >= weekStart && recordDate <= weekEnd) {
+        if (isDwi) {
+          // Aturan Dwi: Selalu potong uang makan (20rb) jika tidak masuk walau dlm jatah
+          if (monthlyAbsentCounter <= FREE_LEAVE_QUOTA) {
+            totalDeductionsThisWeek += 20000; 
+          } else {
+            // Jika lewat jatah 3 hari, potong full (Gapok + Makan)
+            totalDeductionsThisWeek += fullDailyRate;
+            excessLeaveCountThisWeek++;
+          }
+        } else {
+          // Aturan Mega/Lainnya: Tidak dipotong jika masih dalam jatah 3 hari
+          if (monthlyAbsentCounter > FREE_LEAVE_QUOTA) {
+            totalDeductionsThisWeek += fullDailyRate;
+            excessLeaveCountThisWeek++;
+          }
+        }
       }
     }
   });
 
-  const weeklyBase = (dailyGapok + dailyUangMakan) * 7;
-  
-  // LOGIKA BARU: Potong uang makan dulu, jika 0 baru potong gapok
-  let attendanceDeduction = 0;
-  const dailyDeductionRate = user.uangMakan > 0 ? dailyUangMakan : dailyGapok;
-  attendanceDeduction = excessLeaveCount * dailyDeductionRate;
-  
-  const totalSlots = 7;
-  const recordedCount = presentCount + leaveCount;
-  const absentCount = Math.max(0, totalSlots - recordedCount);
-  
-  // Absen tanpa keterangan juga mengikuti logika potongan yang sama
-  const absenceDeduction = absentCount * dailyDeductionRate;
-
-  const totalDeductions = attendanceDeduction + absenceDeduction + manualDeduction;
+  const totalDeductions = totalDeductionsThisWeek + manualDeduction;
   const netSalary = Math.max(0, weeklyBase + bonus - totalDeductions);
 
   return {
@@ -59,14 +82,18 @@ export const calculateWeeklyPayroll = (
     userName: user.name,
     weekStartDate: weekStart.toISOString().split('T')[0],
     weekEndDate: weekEnd.toISOString().split('T')[0],
-    totalPresent: presentCount,
-    totalLeave: leaveCount,
-    excessLeaveCount,
+    totalPresent: presentRecords.length,
+    totalOnTime,
+    totalLate,
+    totalLeave: leaveCountThisWeek,
+    monthlyLeaveCount: monthlyAbsentCounter,
+    excessLeaveCount: excessLeaveCountThisWeek,
     grossSalary: weeklyBase,
     bonus,
     manualDeduction,
     deductions: totalDeductions,
     netSalary: netSalary,
-    dailyRate: dailyDeductionRate // Menyimpan rate potongan yang digunakan
+    dailyRate: fullDailyRate,
+    methodLabel
   };
 };

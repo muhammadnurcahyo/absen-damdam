@@ -1,5 +1,5 @@
 
-import { User, UserRole, OutletConfig } from './types';
+import { User, UserRole, OutletConfig, PayrollMethod } from './types';
 
 export const INITIAL_OUTLET_CONFIG: OutletConfig = {
   latitude: -6.200000,
@@ -10,9 +10,41 @@ export const INITIAL_OUTLET_CONFIG: OutletConfig = {
 };
 
 export const MOCK_USERS: User[] = [
-  { id: '1', name: 'Owner DamDam', username: 'owner', password: '123', role: UserRole.OWNER, gapok: 0, uangMakan: 0, isActive: true },
-  { id: '2', name: 'Budi Laundry', username: 'budi', password: '123', role: UserRole.EMPLOYEE, gapok: 3000000, uangMakan: 500000, isActive: true },
-  { id: '3', name: 'Siti Clean', username: 'siti', password: '123', role: UserRole.EMPLOYEE, gapok: 3200000, uangMakan: 600000, isActive: true },
+  { 
+    id: '1', 
+    name: 'Owner DamDam', 
+    username: 'owner', 
+    password: '123', 
+    role: UserRole.OWNER, 
+    gapok: 0, 
+    uangMakan: 0, 
+    payrollMethod: PayrollMethod.DAILY_30, 
+    isActive: true 
+  },
+  { 
+    id: '2', 
+    name: 'Dwi Laundry', 
+    username: 'dwi', 
+    password: '123', 
+    role: UserRole.EMPLOYEE, 
+    gapok: 3000000, 
+    uangMakan: 600000, 
+    deductionRate: 20000,
+    payrollMethod: PayrollMethod.DAILY_30, 
+    isActive: true 
+  },
+  { 
+    id: '3', 
+    name: 'Mega Clean', 
+    username: 'mega', 
+    password: '123', 
+    role: UserRole.EMPLOYEE, 
+    gapok: 3200000, 
+    uangMakan: 0, 
+    deductionRate: 55000,
+    payrollMethod: PayrollMethod.FIXED_4, 
+    isActive: true 
+  },
 ];
 
 export const DAYS_IN_MONTH = 30;
