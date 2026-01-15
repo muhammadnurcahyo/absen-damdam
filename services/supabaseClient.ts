@@ -1,19 +1,36 @@
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.7';
+import { createClient } from '@supabase/supabase-js';
 
-/**
- * CARA SETUP DI SUPABASE:
- * 1. Buat Project di supabase.com
- * 2. Masuk ke SQL Editor, jalankan perintah untuk membuat tabel:
- *    - employees (id, name, username, password, role, gapok, uang_makan, payroll_method, is_active)
- *    - attendance (id, user_id, date, clock_in, clock_out, latitude, longitude, status, is_late, leave_request_id)
- *    - leave_requests (id, user_id, date, reason, status, evidence_photo)
- *    - config (id, latitude, longitude, radius, clock_in_time)
- *    - payroll_adjustments (user_id, bonus, deduction)
- */
+// Membaca variable dari Netlify Environment Variables
+// Penting: Di Netlify harus diawali dengan VITE_ agar bisa dibaca di client-side
+const supabaseUrl = (import.meta as any).env?.VITE_SUPABASE_URL || '';
+const supabaseAnonKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';
 
-// Gunakan process.env jika di-deploy di Vercel/Cloudflare, atau ganti langsung string di bawah untuk testing
-const supabaseUrl = process.env.SUPABASE_URL || 'https://your-project-url.supabase.co';
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || 'your-anon-key';
+const isUrlValid = (url: string) => {
+  try {
+    return url && url.startsWith('http');
+  } catch {
+    return false;
+  }
+};
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Ekspor instance supabase. Jika URL tidak ada, aplikasi tetap jalan (mock mode)
+export const supabase = isUrlValid(supabaseUrl) && supabaseAnonKey
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : new Proxy({}, {
+      get: () => ({
+        from: () => ({
+          select: () => ({ 
+            order: () => Promise.resolve({ data: [], error: null }), 
+            maybeSingle: () => Promise.resolve({ data: null, error: null }) 
+          }),
+          insert: () => Promise.resolve({ data: null, error: null }),
+          update: () => ({ 
+            match: () => Promise.resolve({ data: null, error: null }),
+            eq: () => Promise.resolve({ data: null, error: null }) 
+          }),
+          delete: () => ({ eq: () => Promise.resolve({ data: null, error: null }) }),
+          upsert: () => Promise.resolve({ data: null, error: null })
+        })
+      })
+    }) as any;

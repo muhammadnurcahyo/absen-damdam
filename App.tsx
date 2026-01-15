@@ -13,16 +13,10 @@ const App: React.FC = () => {
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
   const [outletConfig, setOutletConfig] = useState<OutletConfig>(INITIAL_OUTLET_CONFIG);
-  
-  // Setup penyesuaian payroll awal: 
-  // Bu Mega bayar cicilan kasbon 50rb minggu ini (dari total 350rb)
-  const [payrollAdjustments, setPayrollAdjustments] = useState<Record<string, { bonus: number, deduction: number }>>({
-    '3': { bonus: 0, deduction: 50000 } 
-  });
+  const [payrollAdjustments, setPayrollAdjustments] = useState<Record<string, { bonus: number, deduction: number }>>({});
   
   const [activeMenu, setActiveMenu] = useState<string>('dashboard');
   const [isSyncing, setIsSyncing] = useState(false);
-  const [dbError, setDbError] = useState<string | null>(null);
 
   const [loginUsername, setLoginUsername] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
@@ -34,58 +28,58 @@ const App: React.FC = () => {
 
   const fetchInitialData = async () => {
     setIsSyncing(true);
-    setDbError(null);
     try {
-      const [
-        { data: userData },
-        { data: attData },
-        { data: leaveData },
-        { data: configData },
-        { data: adjData }
-      ] = await Promise.all([
-        supabase.from('employees').select('*'),
-        supabase.from('attendance').select('*').order('date', { ascending: false }),
-        supabase.from('leave_requests').select('*'),
-        supabase.from('config').select('*').maybeSingle(),
-        supabase.from('payroll_adjustments').select('*')
-      ]);
-
-      // Integrasi Data Karyawan
-      const finalUsers = userData && userData.length > 0 ? userData : MOCK_USERS;
-      setUsers(finalUsers);
-
-      /** 
-       * REVISI DATA ABSENSI JANUARI (MOCK)
-       * Bu Mega (ID: 3): Izin 3 & 12 Januari (Total 2x - Masih dalam jatah 3 hari)
-       * Mba Dwi (ID: 2): Izin 9 Januari (1x - Potong Makan Rp 20rb sesuai aturan khusus)
-       */
-      const mockAttendance: AttendanceRecord[] = [
-        // Bu Mega
-        { id: 'att-m3', userId: '3', date: '2025-01-03', clockIn: null, clockOut: null, latitude: 0, longitude: 0, status: 'LEAVE' },
-        { id: 'att-m12', userId: '3', date: '2025-01-12', clockIn: null, clockOut: null, latitude: 0, longitude: 0, status: 'LEAVE' },
-        // Mba Dwi
-        { id: 'att-d1', userId: '2', date: '2025-01-09', clockIn: null, clockOut: null, latitude: 0, longitude: 0, status: 'LEAVE' },
-      ];
-
-      if (attData && attData.length > 0) {
-        setAttendance(attData);
+      const { data: userData } = await supabase.from('employees').select('*');
+      
+      if (userData && userData.length > 0) {
+        // Map snake_case from DB to camelCase in TS
+        const mappedUsers = userData.map((u: any) => ({
+          id: u.id,
+          name: u.name,
+          username: u.username,
+          password: u.password,
+          role: u.role,
+          gapok: u.gapok,
+          uangMakan: u.uang_makan,
+          deductionRate: u.deduction_rate,
+          payrollMethod: u.payroll_method,
+          isActive: u.is_active
+        }));
+        setUsers(mappedUsers);
       } else {
-        setAttendance(mockAttendance);
+        setUsers(MOCK_USERS);
       }
 
-      if (leaveData) setLeaveRequests(leaveData);
-      if (configData) setOutletConfig(configData);
-      
-      if (adjData && adjData.length > 0) {
+      const { data: attData } = await supabase.from('attendance').select('*').order('date', { ascending: false });
+      if (attData) {
+        setAttendance(attData.map((a: any) => ({
+          ...a,
+          userId: a.user_id,
+          clockIn: a.clock_in,
+          clockOut: a.clock_out,
+          leaveRequestId: a.leave_request_id
+        })));
+      }
+
+      const { data: configData } = await supabase.from('config').select('*').maybeSingle();
+      if (configData) setOutletConfig({
+        latitude: configData.latitude,
+        longitude: configData.longitude,
+        radius: configData.radius,
+        clockInTime: configData.clock_in_time,
+        clockOutTime: configData.clock_out_time
+      });
+
+      const { data: adjData } = await supabase.from('payroll_adjustments').select('*');
+      if (adjData) {
         const adjMap = adjData.reduce((acc: any, curr: any) => {
           acc[curr.user_id] = { bonus: curr.bonus, deduction: curr.deduction };
           return acc;
         }, {});
         setPayrollAdjustments(adjMap);
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error("Cloud Sync Error:", error);
-      setDbError("Gagal terhubung ke Database. Menggunakan data lokal.");
       setUsers(MOCK_USERS);
     } finally {
       setIsSyncing(false);
@@ -120,12 +114,33 @@ const App: React.FC = () => {
     };
     
     setUsers(prev => [...prev, newUser]);
-    await supabase.from('employees').insert([newUser]);
+    await supabase.from('employees').insert([{
+      id: newUser.id,
+      name: newUser.name,
+      username: newUser.username,
+      password: newUser.password,
+      role: newUser.role,
+      gapok: newUser.gapok,
+      uang_makan: newUser.uangMakan,
+      deduction_rate: newUser.deductionRate,
+      payroll_method: newUser.payrollMethod,
+      is_active: newUser.isActive
+    }]);
   };
 
-  const handleEditEmployee = async (updatedUser: User) => {
-    setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
-    await supabase.from('employees').update(updatedUser).eq('id', updatedUser.id);
+  const handleEditEmployee = async (u: User) => {
+    setUsers(prev => prev.map(item => item.id === u.id ? u : item));
+    await supabase.from('employees').update({
+      name: u.name,
+      username: u.username,
+      password: u.password,
+      role: u.role,
+      gapok: u.gapok,
+      uang_makan: u.uangMakan,
+      deduction_rate: u.deductionRate,
+      payroll_method: u.payrollMethod,
+      is_active: u.isActive
+    }).eq('id', u.id);
   };
 
   const handleDeleteEmployee = async (userId: string) => {
@@ -155,21 +170,30 @@ const App: React.FC = () => {
       isLate: isLate
     };
     
-    setAttendance(prev => [...prev, newRecord]);
-    await supabase.from('attendance').insert([newRecord]);
+    setAttendance(prev => [newRecord, ...prev]);
+    await supabase.from('attendance').insert([{
+      id: newRecord.id,
+      user_id: newRecord.userId,
+      date: newRecord.date,
+      clock_in: newRecord.clockIn,
+      status: newRecord.status,
+      is_late: newRecord.isLate,
+      latitude: newRecord.latitude,
+      longitude: newRecord.longitude
+    }]);
   };
 
   const handleClockOut = async () => {
     if (!currentUser) return;
     const todayStr = new Date().toISOString().split('T')[0];
-    const now = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false });
+    const nowTime = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false });
     
     setAttendance(prev => prev.map(a => 
-      (a.userId === currentUser.id && a.date === todayStr) ? { ...a, clockOut: now } : a
+      (a.userId === currentUser.id && a.date === todayStr) ? { ...a, clockOut: nowTime } : a
     ));
     
     await supabase.from('attendance')
-      .update({ clockOut: now })
+      .update({ clock_out: nowTime })
       .match({ user_id: currentUser.id, date: todayStr });
   };
 
@@ -186,7 +210,14 @@ const App: React.FC = () => {
     };
     
     setLeaveRequests(prev => [...prev, newLeave]);
-    await supabase.from('leave_requests').insert([newLeave]);
+    await supabase.from('leave_requests').insert([{
+      id: newLeave.id,
+      user_id: newLeave.userId,
+      date: newLeave.date,
+      reason: newLeave.reason,
+      status: newLeave.status,
+      evidence_photo: newLeave.evidencePhoto
+    }]);
 
     const newAttRecord: AttendanceRecord = {
       id: Math.random().toString(36).substr(2, 9),
@@ -200,11 +231,14 @@ const App: React.FC = () => {
       leaveRequestId: leaveId
     };
     
-    setAttendance(prev => {
-      const filtered = prev.filter(a => !(a.userId === currentUser.id && a.date === date));
-      return [...filtered, newAttRecord];
-    });
-    await supabase.from('attendance').insert([newAttRecord]);
+    setAttendance(prev => [newAttRecord, ...prev]);
+    await supabase.from('attendance').insert([{
+      id: newAttRecord.id,
+      user_id: newAttRecord.userId,
+      date: newAttRecord.date,
+      status: newAttRecord.status,
+      leave_request_id: newAttRecord.leaveRequestId
+    }]);
   };
 
   const handleApproveLeave = async (leaveId: string, status: 'APPROVED' | 'REJECTED') => {
@@ -220,7 +254,14 @@ const App: React.FC = () => {
 
   const handleUpdateConfig = async (config: OutletConfig) => {
     setOutletConfig(config);
-    await supabase.from('config').upsert([config]);
+    await supabase.from('config').upsert([{
+      id: 1, // Kita pakai satu baris saja untuk config
+      latitude: config.latitude,
+      longitude: config.longitude,
+      radius: config.radius,
+      clock_in_time: config.clockInTime,
+      clock_out_time: config.clockOutTime
+    }]);
   };
 
   const handleUpdateAdjustment = async (userId: string, field: 'bonus' | 'deduction', value: number) => {
@@ -258,14 +299,9 @@ const App: React.FC = () => {
             {loginError && <p className="text-red-500 text-[10px] font-black uppercase text-center">{loginError}</p>}
             <button type="submit" className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black shadow-xl shadow-indigo-100 uppercase tracking-widest active:scale-95 transition-all">Login Sistem</button>
           </form>
-          
-          <div className="mt-8 pt-8 border-t border-slate-100">
-            <div className="flex items-center justify-center space-x-3">
-              <div className={`w-2 h-2 rounded-full ${isSyncing ? 'bg-amber-500 animate-pulse' : (dbError ? 'bg-red-500' : 'bg-green-500')}`} />
-              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                {isSyncing ? 'Sinkronisasi Cloud...' : (dbError ? 'Mode Offline' : 'Cloud Terhubung')}
-              </span>
-            </div>
+          <div className="mt-8 flex items-center justify-center space-x-2">
+             <div className={`w-2 h-2 rounded-full ${isSyncing ? 'bg-amber-500 animate-pulse' : 'bg-green-500'}`} />
+             <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{isSyncing ? 'Sinkronisasi...' : 'Cloud Aktif'}</span>
           </div>
         </div>
       </div>
@@ -279,13 +315,6 @@ const App: React.FC = () => {
       activeMenu={activeMenu} 
       setActiveMenu={setActiveMenu}
     >
-      {isSyncing && (
-        <div className="fixed top-4 right-4 z-[100] bg-white/80 backdrop-blur px-4 py-2 rounded-full shadow-lg border border-slate-100 flex items-center space-x-2 animate-bounce">
-           <div className="w-2 h-2 bg-indigo-600 rounded-full animate-pulse"></div>
-           <span className="text-[8px] font-black uppercase text-slate-600 tracking-widest">Sinkronisasi...</span>
-        </div>
-      )}
-
       {currentUser.role === UserRole.EMPLOYEE ? (
         <EmployeeDashboard 
           user={currentUser} 

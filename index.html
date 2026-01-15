@@ -12,7 +12,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
     <style>
         body { font-family: 'Inter', sans-serif; }
-        /* Custom date picker styling */
         input[type="date"]::-webkit-calendar-picker-indicator {
             cursor: pointer;
             filter: invert(0.5);
@@ -23,12 +22,14 @@
   "imports": {
     "react/": "https://esm.sh/react@^19.2.3/",
     "react": "https://esm.sh/react@^19.2.3",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/"
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.90.1"
   }
 }
 </script>
 </head>
 <body class="bg-white text-slate-900">
     <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
 </body>
 </html>
