@@ -23,25 +23,25 @@ export const MOCK_USERS: User[] = [
   },
   { 
     id: '2', 
-    name: 'Dwi Laundry', 
+    name: 'Mba Dwi', 
     username: 'dwi', 
     password: '123', 
     role: UserRole.EMPLOYEE, 
-    gapok: 3000000, 
+    gapok: 1500000, 
     uangMakan: 600000, 
-    deductionRate: 20000,
+    deductionRate: 20000, // Aturan potong uang makan jika izin
     payrollMethod: PayrollMethod.DAILY_30, 
     isActive: true 
   },
   { 
     id: '3', 
-    name: 'Mega Clean', 
+    name: 'Bu Mega', 
     username: 'mega', 
     password: '123', 
     role: UserRole.EMPLOYEE, 
-    gapok: 3200000, 
+    gapok: 1650000, 
     uangMakan: 0, 
-    deductionRate: 55000,
+    deductionRate: 55000, // Potongan harian jika jatah izin habis
     payrollMethod: PayrollMethod.FIXED_4, 
     isActive: true 
   },

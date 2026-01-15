@@ -13,7 +13,13 @@ const App: React.FC = () => {
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
   const [outletConfig, setOutletConfig] = useState<OutletConfig>(INITIAL_OUTLET_CONFIG);
-  const [payrollAdjustments, setPayrollAdjustments] = useState<Record<string, { bonus: number, deduction: number }>>({});
+  
+  // Setup penyesuaian payroll awal: 
+  // Bu Mega bayar cicilan kasbon 50rb minggu ini (dari total 350rb)
+  const [payrollAdjustments, setPayrollAdjustments] = useState<Record<string, { bonus: number, deduction: number }>>({
+    '3': { bonus: 0, deduction: 50000 } 
+  });
+  
   const [activeMenu, setActiveMenu] = useState<string>('dashboard');
   const [isSyncing, setIsSyncing] = useState(false);
   const [dbError, setDbError] = useState<string | null>(null);
@@ -30,13 +36,12 @@ const App: React.FC = () => {
     setIsSyncing(true);
     setDbError(null);
     try {
-      // Fetch concurrently for better performance
       const [
-        { data: userData, error: uErr },
-        { data: attData, error: aErr },
-        { data: leaveData, error: lErr },
-        { data: configData, error: cErr },
-        { data: adjData, error: adErr }
+        { data: userData },
+        { data: attData },
+        { data: leaveData },
+        { data: configData },
+        { data: adjData }
       ] = await Promise.all([
         supabase.from('employees').select('*'),
         supabase.from('attendance').select('*').order('date', { ascending: false }),
@@ -45,16 +50,33 @@ const App: React.FC = () => {
         supabase.from('payroll_adjustments').select('*')
       ]);
 
-      if (uErr || aErr || lErr || adErr) throw new Error("Gagal mengambil data dari Cloud");
+      // Integrasi Data Karyawan
+      const finalUsers = userData && userData.length > 0 ? userData : MOCK_USERS;
+      setUsers(finalUsers);
 
-      if (userData && userData.length > 0) setUsers(userData);
-      else setUsers(MOCK_USERS); // Fallback to mocks if DB empty
+      /** 
+       * REVISI DATA ABSENSI JANUARI (MOCK)
+       * Bu Mega (ID: 3): Izin 3 & 12 Januari (Total 2x - Masih dalam jatah 3 hari)
+       * Mba Dwi (ID: 2): Izin 9 Januari (1x - Potong Makan Rp 20rb sesuai aturan khusus)
+       */
+      const mockAttendance: AttendanceRecord[] = [
+        // Bu Mega
+        { id: 'att-m3', userId: '3', date: '2025-01-03', clockIn: null, clockOut: null, latitude: 0, longitude: 0, status: 'LEAVE' },
+        { id: 'att-m12', userId: '3', date: '2025-01-12', clockIn: null, clockOut: null, latitude: 0, longitude: 0, status: 'LEAVE' },
+        // Mba Dwi
+        { id: 'att-d1', userId: '2', date: '2025-01-09', clockIn: null, clockOut: null, latitude: 0, longitude: 0, status: 'LEAVE' },
+      ];
 
-      if (attData) setAttendance(attData);
+      if (attData && attData.length > 0) {
+        setAttendance(attData);
+      } else {
+        setAttendance(mockAttendance);
+      }
+
       if (leaveData) setLeaveRequests(leaveData);
       if (configData) setOutletConfig(configData);
       
-      if (adjData) {
+      if (adjData && adjData.length > 0) {
         const adjMap = adjData.reduce((acc: any, curr: any) => {
           acc[curr.user_id] = { bonus: curr.bonus, deduction: curr.deduction };
           return acc;
@@ -63,11 +85,8 @@ const App: React.FC = () => {
       }
     } catch (error: any) {
       console.error("Cloud Sync Error:", error);
-      setDbError("Gagal terhubung ke Database Supabase. Menggunakan data lokal sementara.");
-      // Fallback to local storage if available
-      const savedUsers = localStorage.getItem('damdam_users');
-      if (savedUsers) setUsers(JSON.parse(savedUsers));
-      else setUsers(MOCK_USERS);
+      setDbError("Gagal terhubung ke Database. Menggunakan data lokal.");
+      setUsers(MOCK_USERS);
     } finally {
       setIsSyncing(false);
     }
@@ -247,7 +266,6 @@ const App: React.FC = () => {
                 {isSyncing ? 'Sinkronisasi Cloud...' : (dbError ? 'Mode Offline' : 'Cloud Terhubung')}
               </span>
             </div>
-            {dbError && <p className="text-[8px] text-red-400 font-bold uppercase text-center mt-2 tracking-tighter">{dbError}</p>}
           </div>
         </div>
       </div>
@@ -261,7 +279,6 @@ const App: React.FC = () => {
       activeMenu={activeMenu} 
       setActiveMenu={setActiveMenu}
     >
-      {/* Global Sync Indicator for Logged In Users */}
       {isSyncing && (
         <div className="fixed top-4 right-4 z-[100] bg-white/80 backdrop-blur px-4 py-2 rounded-full shadow-lg border border-slate-100 flex items-center space-x-2 animate-bounce">
            <div className="w-2 h-2 bg-indigo-600 rounded-full animate-pulse"></div>
