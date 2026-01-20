@@ -66,7 +66,6 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
   const onTimeCount = monthRecords.filter(a => a.status === 'PRESENT' && !a.isLate).length;
   const lateCount = monthRecords.filter(a => a.status === 'PRESENT' && a.isLate).length;
 
-  // Real-time payroll summary for current active week
   const weekStart = new Date(slipStartDate || new Date());
   const weekEnd = new Date(slipEndDate || new Date());
   const payrollSummary = calculateWeeklyPayroll(
@@ -99,13 +98,17 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
         outletConfig.latitude,
         outletConfig.longitude
       );
-      if (dist <= outletConfig.radius) {
+      
+      // Radius default 100 jika tidak ada config
+      const allowedRadius = outletConfig.radius || 100;
+
+      if (dist <= allowedRadius) {
         onClockIn(pos.coords.latitude, pos.coords.longitude);
       } else {
-        setErrorLoc(`Radius error: Anda berada ${Math.round(dist)}m dari outlet.`);
+        setErrorLoc(`Lokasi Terlalu Jauh: Anda berjarak ${Math.round(dist)}m. Batas radius: ${allowedRadius}m.`);
       }
     } catch (err) {
-      setErrorLoc("Mohon aktifkan GPS perangkat Anda.");
+      setErrorLoc("GPS Error: Gagal mendapatkan lokasi. Pastikan GPS aktif dan izin diberikan.");
     } finally {
       setLoadingLoc(false);
     }
@@ -195,7 +198,7 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
         <div className="lg:col-span-5 space-y-6 md:space-y-8">
           {/* Absensi Action */}
           <div className="bg-white p-8 md:p-10 rounded-[32px] md:rounded-[48px] border border-slate-100 shadow-sm text-center">
-            <h2 className="text-xl md:text-2xl font-black text-slate-900 mb-6 tracking-tight tracking-tight">Halo, {user.name}</h2>
+            <h2 className="text-xl md:text-2xl font-black text-slate-900 mb-6 tracking-tight">Halo, {user.name}</h2>
             <div className="mb-8">
               {!todayRecord?.clockIn && todayRecord?.status !== 'LEAVE' && todayRecord?.status !== 'LEAVE_PENDING' ? (
                 <button onClick={handleClockInAction} disabled={loadingLoc} className="w-full py-5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-[20px] font-black text-lg shadow-xl shadow-indigo-100 active:scale-95 transition-all">
@@ -210,7 +213,7 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
               ) : (
                 <div className="p-6 bg-indigo-50 text-indigo-700 rounded-2xl font-black border border-indigo-100 text-sm">SELESAI HARI INI ✅</div>
               )}
-              {errorLoc && <p className="mt-4 text-[10px] font-black text-red-500 uppercase">{errorLoc}</p>}
+              {errorLoc && <p className="mt-4 text-[10px] font-black text-red-500 uppercase px-4 leading-relaxed">{errorLoc}</p>}
             </div>
 
             {/* Payroll Real-time Summary */}

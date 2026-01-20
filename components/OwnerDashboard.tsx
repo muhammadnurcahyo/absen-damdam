@@ -42,7 +42,7 @@ const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
   const [empForm, setEmpForm] = useState<Partial<User>>({ 
     name: '', username: '', password: '', gapok: 0, uangMakan: 0, deductionRate: 0, payrollMethod: PayrollMethod.DAILY_30 
   });
-  const [tempConfig, setTempConfig] = useState(outletConfig);
+  const [tempConfig, setTempConfig] = useState<OutletConfig>(outletConfig);
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
 
   useEffect(() => {
@@ -56,6 +56,11 @@ const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
     setPayStartDate(start.toISOString().split('T')[0]);
     setPayEndDate(end.toISOString().split('T')[0]);
   }, []);
+
+  // Update local temp config when prop changes (e.g. after sync or fetch)
+  useEffect(() => {
+    setTempConfig(outletConfig);
+  }, [outletConfig]);
 
   const getStatsForEmployee = (userId: string) => {
     const now = new Date();
@@ -176,6 +181,11 @@ const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
     const monthRecords = attendance.filter(a => a.userId === user.id && new Date(a.date) >= monthStart && new Date(a.date) <= end);
     const adj = payrollAdjustments[user.id] || { bonus: 0, deduction: 0 };
     return calculateWeeklyPayroll(user, attendance.filter(a => a.userId === user.id), monthRecords, start, end, adj.bonus, adj.deduction);
+  };
+
+  const handleSaveConfig = () => {
+    onUpdateConfig(tempConfig);
+    alert('Konfigurasi outlet berhasil disimpan!');
   };
 
   return (
@@ -360,24 +370,57 @@ const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
               <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Jam Masuk Standar</label>
-                <input type="time" value={tempConfig.clockInTime} onChange={e => setTempConfig({...tempConfig, clockInTime: e.target.value})} className="w-full p-5 bg-white border border-slate-200 rounded-2xl font-black text-sm" />
+                <input type="time" value={tempConfig.clockInTime} onChange={e => setTempConfig({...tempConfig, clockInTime: e.target.value})} className="w-full p-5 bg-white border border-slate-200 rounded-2xl font-black text-sm outline-none" />
               </div>
               <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Radius Geofence (Meter)</label>
-                <input type="number" value={tempConfig.radius} onChange={e => setTempConfig({...tempConfig, radius: parseInt(e.target.value)})} className="w-full p-5 bg-white border border-slate-200 rounded-2xl font-black text-sm" />
+                <input type="number" value={tempConfig.radius} onChange={e => setTempConfig({...tempConfig, radius: parseInt(e.target.value) || 100})} className="w-full p-5 bg-white border border-slate-200 rounded-2xl font-black text-sm outline-none" />
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
               <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Latitude Lokasi</label>
-                <input type="number" step="any" value={tempConfig.latitude} onChange={e => setTempConfig({...tempConfig, latitude: parseFloat(e.target.value)})} className="w-full p-5 bg-white border border-slate-200 rounded-2xl font-black text-sm" />
+                <input 
+                  type="text" 
+                  inputMode="decimal"
+                  value={tempConfig.latitude} 
+                  onChange={e => {
+                    const val = e.target.value;
+                    // Allow intermediate typing (like '-' or '.')
+                    setTempConfig({...tempConfig, latitude: val as any});
+                  }} 
+                  onBlur={e => {
+                    // Normalize to number on blur
+                    const num = parseFloat(e.target.value) || 0;
+                    setTempConfig({...tempConfig, latitude: num});
+                  }}
+                  className="w-full p-5 bg-white border border-slate-200 rounded-2xl font-black text-sm outline-none focus:border-indigo-500 transition-all" 
+                />
               </div>
               <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Longitude Lokasi</label>
-                <input type="number" step="any" value={tempConfig.longitude} onChange={e => setTempConfig({...tempConfig, longitude: parseFloat(e.target.value)})} className="w-full p-5 bg-white border border-slate-200 rounded-2xl font-black text-sm" />
+                <input 
+                  type="text" 
+                  inputMode="decimal"
+                  value={tempConfig.longitude} 
+                  onChange={e => {
+                    const val = e.target.value;
+                    setTempConfig({...tempConfig, longitude: val as any});
+                  }} 
+                  onBlur={e => {
+                    const num = parseFloat(e.target.value) || 0;
+                    setTempConfig({...tempConfig, longitude: num});
+                  }}
+                  className="w-full p-5 bg-white border border-slate-200 rounded-2xl font-black text-sm outline-none focus:border-indigo-500 transition-all" 
+                />
               </div>
             </div>
-            <button onClick={() => { onUpdateConfig(tempConfig); alert('Konfigurasi berhasil diperbarui!'); }} className="w-full bg-indigo-600 text-white py-6 rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-2xl hover:bg-indigo-700 active:scale-95 transition-all">Simpan Konfigurasi Sekarang</button>
+            <div className="p-6 bg-amber-50 rounded-2xl border border-amber-100">
+               <p className="text-[10px] font-bold text-amber-700 uppercase leading-relaxed tracking-wide">
+                 ⚠️ Pastikan koordinat akurat. Jika tidak sesuai, karyawan tidak akan bisa melakukan absen masuk di lokasi outlet.
+               </p>
+            </div>
+            <button onClick={handleSaveConfig} className="w-full bg-indigo-600 text-white py-6 rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-2xl hover:bg-indigo-700 active:scale-95 transition-all">Simpan Konfigurasi Sekarang</button>
           </div>
         </div>
       )}
