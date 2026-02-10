@@ -28,6 +28,7 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
 }) => {
   const [loadingLoc, setLoadingLoc] = useState(false);
   const [errorLoc, setErrorLoc] = useState<string | null>(null);
+  const [currentDist, setCurrentDist] = useState<number | null>(null);
   const [leaveDate, setLeaveDate] = useState('');
   const [leaveReason, setLeaveReason] = useState('');
   const [evidencePhoto, setEvidencePhoto] = useState<string | undefined>(undefined);
@@ -90,6 +91,7 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
   const handleClockInAction = async () => {
     setLoadingLoc(true);
     setErrorLoc(null);
+    setCurrentDist(null);
     try {
       const pos = await getCurrentPosition();
       const dist = calculateDistance(
@@ -98,17 +100,15 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
         outletConfig.latitude,
         outletConfig.longitude
       );
-      
-      // Radius default 100 jika tidak ada config
+      setCurrentDist(dist);
       const allowedRadius = outletConfig.radius || 100;
-
       if (dist <= allowedRadius) {
         onClockIn(pos.coords.latitude, pos.coords.longitude);
       } else {
-        setErrorLoc(`Lokasi Terlalu Jauh: Anda berjarak ${Math.round(dist)}m. Batas radius: ${allowedRadius}m.`);
+        setErrorLoc(`Lokasi Terlalu Jauh: Anda berjarak ${Math.round(dist)}m dari outlet.`);
       }
     } catch (err) {
-      setErrorLoc("GPS Error: Gagal mendapatkan lokasi. Pastikan GPS aktif dan izin diberikan.");
+      setErrorLoc("GPS Error: Pastikan akses lokasi diizinkan di browser/HP Anda.");
     } finally {
       setLoadingLoc(false);
     }
@@ -140,17 +140,18 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
     doc.text(`Periode Kerja: ${report.weekStartDate} s/d ${report.weekEndDate}`, 14, 52);
     doc.setFont("helvetica", "bold");
     doc.text(`Total Izin Bulan Ini: ${report.monthlyLeaveCount} kali`, 14, 59);
+    doc.text(`Sisa Kasbon: Rp ${report.totalKasbon.toLocaleString('id-ID')}`, 14, 66);
     doc.setFont("helvetica", "normal");
 
     const deductionLabel = user.uangMakan > 0 ? 'Potongan Kehadiran' : 'Potongan Gaji';
     (doc as any).autoTable({
-      startY: 70,
+      startY: 75,
       head: [['DESKRIPSI', 'KETERANGAN', 'JUMLAH']],
       body: [
         ['Gaji Kotor Mingguan', report.methodLabel, `Rp ${report.grossSalary.toLocaleString('id-ID')}`],
         ['Bonus Mingguan', 'Diberikan Owner', `Rp ${report.bonus.toLocaleString('id-ID')}`],
         [deductionLabel, `${report.totalLeave} Izin Minggu Ini`, `Rp ${(report.deductions - report.manualDeduction).toLocaleString('id-ID')}`],
-        ['Potongan Lainnya', 'Manual/Kasbon', `Rp ${report.manualDeduction.toLocaleString('id-ID')}`],
+        ['Potongan Kasbon / Lainnya', 'Dipotong dari Gaji', `Rp ${report.manualDeduction.toLocaleString('id-ID')}`],
       ],
       theme: 'grid',
       headStyles: { fillColor: [79, 70, 229] },
@@ -169,8 +170,7 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
 
   return (
     <div className="space-y-6 md:space-y-8">
-      {/* Statistik Utama */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
         <div className="bg-white p-5 rounded-[24px] border border-slate-100 shadow-sm flex items-center space-x-4">
           <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center text-lg">📅</div>
           <div>
@@ -192,18 +192,31 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
             <p className="text-lg font-black text-slate-900">{lateCount} Hari</p>
           </div>
         </div>
+        <div className="bg-white p-5 rounded-[24px] border border-slate-100 shadow-sm flex items-center space-x-4">
+          <div className="w-10 h-10 bg-red-50 text-red-600 rounded-xl flex items-center justify-center text-lg">💸</div>
+          <div>
+            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Sisa Kasbon</p>
+            <p className="text-lg font-black text-red-600">Rp {user.totalKasbon.toLocaleString('id-ID')}</p>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8 items-start">
         <div className="lg:col-span-5 space-y-6 md:space-y-8">
-          {/* Absensi Action */}
           <div className="bg-white p-8 md:p-10 rounded-[32px] md:rounded-[48px] border border-slate-100 shadow-sm text-center">
             <h2 className="text-xl md:text-2xl font-black text-slate-900 mb-6 tracking-tight">Halo, {user.name}</h2>
             <div className="mb-8">
               {!todayRecord?.clockIn && todayRecord?.status !== 'LEAVE' && todayRecord?.status !== 'LEAVE_PENDING' ? (
-                <button onClick={handleClockInAction} disabled={loadingLoc} className="w-full py-5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-[20px] font-black text-lg shadow-xl shadow-indigo-100 active:scale-95 transition-all">
-                  {loadingLoc ? 'MENGECEK...' : 'ABSEN MASUK'}
-                </button>
+                <div className="space-y-4">
+                  <button onClick={handleClockInAction} disabled={loadingLoc} className="w-full py-5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-[20px] font-black text-lg shadow-xl shadow-indigo-100 active:scale-95 transition-all">
+                    {loadingLoc ? '📡 MENGECEK KOORDINAT...' : '📍 ABSEN MASUK'}
+                  </button>
+                  {currentDist !== null && (
+                    <div className={`text-[10px] font-black uppercase tracking-widest ${currentDist <= outletConfig.radius ? 'text-green-600' : 'text-red-500'}`}>
+                      Jarak Anda: {Math.round(currentDist)}m dari Outlet (Batas: {outletConfig.radius}m)
+                    </div>
+                  )}
+                </div>
               ) : todayRecord?.status === 'LEAVE_PENDING' ? (
                 <div className="p-6 bg-amber-50 text-amber-700 rounded-2xl font-black border border-amber-100 text-sm">MENUNGGU ACC ⏳</div>
               ) : todayRecord?.status === 'LEAVE' ? (
@@ -216,9 +229,8 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
               {errorLoc && <p className="mt-4 text-[10px] font-black text-red-500 uppercase px-4 leading-relaxed">{errorLoc}</p>}
             </div>
 
-            {/* Payroll Real-time Summary */}
             <div className="bg-indigo-900 text-white p-6 rounded-[24px] text-left mb-6 shadow-xl shadow-indigo-100">
-               <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-1">Ringkasan Gaji Minggu Ini</p>
+               <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-1">Gaji Bersih Minggu Ini</p>
                <h3 className="text-2xl font-black mb-4">Rp {payrollSummary.netSalary.toLocaleString('id-ID')}</h3>
                <div className="grid grid-cols-2 gap-2 text-[9px] font-black uppercase tracking-widest">
                   <div className="bg-white/10 p-2 rounded-lg">
@@ -230,6 +242,11 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
                     <p className="text-red-400">Rp {payrollSummary.deductions.toLocaleString('id-ID')}</p>
                   </div>
                </div>
+               {payrollSummary.manualDeduction > 0 && (
+                 <p className="text-[8px] font-black text-indigo-400 mt-3 uppercase tracking-wider">
+                   Termasuk Potongan Kasbon: Rp {payrollSummary.manualDeduction.toLocaleString('id-ID')}
+                 </p>
+               )}
             </div>
 
             <div className="bg-slate-50 p-6 rounded-[24px] space-y-4">
@@ -245,7 +262,12 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
           <div className="bg-white p-8 md:p-10 rounded-[32px] md:rounded-[48px] border border-slate-100 shadow-sm">
             <h3 className="font-black text-lg text-slate-900 mb-6 uppercase tracking-tight">Ajukan Izin</h3>
             <div className="space-y-4">
-              <input type="date" value={leaveDate} onChange={e => setLeaveDate(e.target.value)} className="w-full p-4 bg-white border border-slate-200 rounded-xl font-bold outline-none text-sm" min={todayStr} />
+              <input 
+                type="date" 
+                value={leaveDate} 
+                onChange={e => setLeaveDate(e.target.value)} 
+                className="w-full p-4 bg-white border border-slate-200 rounded-xl font-bold outline-none text-sm" 
+              />
               <textarea value={leaveReason} onChange={e => setLeaveReason(e.target.value)} placeholder="Alasan ketidakhadiran..." className="w-full p-4 bg-white border border-slate-200 rounded-xl font-medium min-h-[100px] outline-none text-sm" />
               <div onClick={() => fileInputRef.current?.click()} className="w-full p-6 border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:bg-slate-50 transition-all bg-white">
                 {evidencePhoto ? <img src={evidencePhoto} className="h-20 object-contain rounded-lg shadow-sm" /> : <div className="text-center text-slate-400 text-[10px] font-black uppercase tracking-widest">📸 Foto Bukti</div>}

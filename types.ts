@@ -19,6 +19,7 @@ export interface User {
   uangMakan: number;
   deductionRate?: number;
   payrollMethod: PayrollMethod;
+  totalKasbon: number; // Field baru untuk saldo kasbon
   isActive: boolean;
 }
 
@@ -61,7 +62,7 @@ export interface PayrollReport {
   totalOnTime: number;
   totalLate: number;
   totalLeave: number;
-  monthlyLeaveCount: number; // New field
+  monthlyLeaveCount: number;
   excessLeaveCount: number;
   grossSalary: number;
   deductions: number;
@@ -70,4 +71,5 @@ export interface PayrollReport {
   netSalary: number;
   dailyRate: number;
   methodLabel: string;
+  totalKasbon: number; // Menampilkan saldo kasbon saat ini di slip
 }

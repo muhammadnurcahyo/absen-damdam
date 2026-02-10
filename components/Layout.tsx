@@ -22,6 +22,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, children, activeMenu, s
   const ownerNav: NavItem[] = [
     { id: 'dashboard', label: 'Antrean Izin', icon: '📝' },
     { id: 'employees', label: 'Manajer Staf', icon: '👥' },
+    { id: 'kasbon', label: 'Kasbon', icon: '💸' }, // Menu Kasbon Baru
     { id: 'attendance', label: 'Monitoring', icon: '📊' },
     { id: 'payroll', label: 'Payroll', icon: '💳' },
     { id: 'settings', label: 'Sistem', icon: '⚙️' },
@@ -38,19 +39,33 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, children, activeMenu, s
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col lg:flex-row">
       {/* MOBILE HEADER */}
-      <header className="lg:hidden bg-indigo-900 text-white p-4 flex items-center justify-between sticky top-0 z-50">
+      <header className="lg:hidden bg-indigo-900 text-white p-4 flex items-center justify-between sticky top-0 z-50 shadow-md">
         <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
+          <div className="w-9 h-9 bg-white rounded-xl flex items-center justify-center shadow-lg">
             <span className="text-xl">🧺</span>
           </div>
-          <span className="text-sm font-black tracking-widest uppercase">DamDam</span>
+          <div>
+            <span className="text-xs font-black tracking-widest uppercase block leading-none">DamDam</span>
+            <span className="text-[8px] font-black text-indigo-400 uppercase tracking-tight">System Active</span>
+          </div>
         </div>
-        <button 
-          onClick={toggleMobileMenu}
-          className="p-2 hover:bg-white/10 rounded-xl transition-all"
-        >
-          <span className="text-xl">{isMobileMenuOpen ? '✕' : '☰'}</span>
-        </button>
+        
+        <div className="flex items-center space-x-2">
+          <button 
+            onClick={onLogout}
+            className="flex items-center space-x-1 px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl transition-all shadow-lg active:scale-95 border border-red-500"
+          >
+            <span className="text-sm">🚪</span>
+            <span className="text-[10px] font-black uppercase tracking-widest">KELUAR</span>
+          </button>
+          
+          <button 
+            onClick={toggleMobileMenu}
+            className="p-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all"
+          >
+            <span className="text-lg font-bold">{isMobileMenuOpen ? '✕' : '☰'}</span>
+          </button>
+        </div>
       </header>
 
       {/* MAIN SIDEBAR */}
@@ -59,8 +74,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, children, activeMenu, s
         ${isMobileMenuOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}
       `}>
         <div className="h-full flex flex-col p-8">
-          {/* Logo */}
-          <div className="flex items-center space-x-4 mb-10">
+          <div className="hidden lg:flex items-center space-x-4 mb-10">
             <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-xl shadow-black/20">
                <span className="text-2xl">🧺</span>
             </div>
@@ -73,11 +87,10 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, children, activeMenu, s
             </div>
           </div>
 
-          {/* User Profile */}
           {user && (
             <div className="bg-white/10 border border-white/10 rounded-[32px] p-6 mb-8">
               <div className="flex items-center space-x-4 mb-4">
-                <div className="w-12 h-12 bg-indigo-500 rounded-full flex items-center justify-center font-black text-lg border-2 border-indigo-400">
+                <div className="w-12 h-12 bg-indigo-500 rounded-full flex items-center justify-center font-black text-lg border-2 border-indigo-400 shadow-inner">
                   {user.name.charAt(0).toUpperCase()}
                 </div>
                 <div className="overflow-hidden">
@@ -93,7 +106,6 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, children, activeMenu, s
             </div>
           )}
 
-          {/* Navigation Items */}
           <nav className="flex-1 space-y-2">
             <p className="text-[9px] font-black text-indigo-500 uppercase tracking-[0.3em] mb-4 ml-2">Menu Utama</p>
             {navItems.map((item) => (
@@ -115,14 +127,13 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, children, activeMenu, s
             ))}
           </nav>
 
-          {/* Footer & Logout */}
           <div className="mt-auto pt-8">
             <button
               onClick={() => {
                 setIsMobileMenuOpen(false);
                 onLogout();
               }}
-              className="w-full flex items-center justify-center space-x-3 bg-red-500 hover:bg-red-600 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-lg shadow-red-900/20 active:scale-95"
+              className="w-full flex items-center justify-center space-x-3 bg-red-600 hover:bg-red-700 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-lg shadow-red-900/20 active:scale-95"
             >
               <span>🚪</span>
               <span>Log Out</span>
@@ -134,7 +145,6 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, children, activeMenu, s
         </div>
       </aside>
 
-      {/* OVERLAY */}
       {isMobileMenuOpen && (
         <div 
           className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 lg:hidden"
@@ -142,7 +152,6 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, children, activeMenu, s
         />
       )}
 
-      {/* CONTENT */}
       <main className="flex-1 h-screen overflow-y-auto">
         <div className="max-w-7xl mx-auto p-4 md:p-8 lg:p-12">
           {children}

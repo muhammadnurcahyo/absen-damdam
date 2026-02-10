@@ -19,6 +19,7 @@ export const MOCK_USERS: User[] = [
     gapok: 0, 
     uangMakan: 0, 
     payrollMethod: PayrollMethod.DAILY_30, 
+    totalKasbon: 0,
     isActive: true 
   },
   { 
@@ -29,8 +30,9 @@ export const MOCK_USERS: User[] = [
     role: UserRole.EMPLOYEE, 
     gapok: 1500000, 
     uangMakan: 600000, 
-    deductionRate: 20000, // Aturan potong uang makan jika izin
-    payrollMethod: PayrollMethod.DAILY_30, 
+    deductionRate: 20000, 
+    payrollMethod: PayrollMethod.FIXED_4,
+    totalKasbon: 0,
     isActive: true 
   },
   { 
@@ -41,8 +43,9 @@ export const MOCK_USERS: User[] = [
     role: UserRole.EMPLOYEE, 
     gapok: 1650000, 
     uangMakan: 0, 
-    deductionRate: 55000, // Potongan harian jika jatah izin habis
+    deductionRate: 55000, 
     payrollMethod: PayrollMethod.FIXED_4, 
+    totalKasbon: 0,
     isActive: true 
   },
 ];
