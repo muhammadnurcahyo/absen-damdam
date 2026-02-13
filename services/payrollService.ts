@@ -57,17 +57,17 @@ export const calculateWeeklyPayroll = (
   const weekStartStr = toLocalDateString(weekStart);
   const weekEndStr = toLocalDateString(weekEnd);
   
-  // Deduplicate records by date to ensure one day = one calculation
-  // Gabungkan semua records yang relevan (semua records user) untuk menghitung kuota bulanan dengan benar
+  // Deduplicate records by date
   const dailyRecordsMap = new Map<string, AttendanceRecord>();
   allUserRecords.forEach(record => {
     const existing = dailyRecordsMap.get(record.date);
     if (!existing) {
       dailyRecordsMap.set(record.date, record);
     } else {
-      if (record.status === 'LEAVE' || record.status === 'LEAVE_PENDING') {
+      // Prioritaskan status yang berpengaruh pada payroll
+      if (record.status === 'LEAVE' || record.status === 'LEAVE_PENDING' || record.status === 'ABSENT') {
         dailyRecordsMap.set(record.date, record);
-      } else if (record.status === 'PRESENT' && existing.status === 'ABSENT') {
+      } else if (record.status === 'PRESENT' && (existing.status !== 'LEAVE' && existing.status !== 'LEAVE_PENDING')) {
         dailyRecordsMap.set(record.date, record);
       }
     }
@@ -81,16 +81,16 @@ export const calculateWeeklyPayroll = (
   let weekLate = 0;
   let weekLeave = 0;
 
-  // Jalankan perhitungan mulai dari weekStart agar "kemarin" yang berada di beda bulan tetap terhitung
+  // Loop utama perhitungan payroll
   const tempDate = new Date(weekStart);
   while (tempDate <= weekEnd) {
     const dateStr = toLocalDateString(tempDate);
-    
-    // Untuk akumulasi kuota bulanan, kita harus hitung mulai dari tanggal 1 di bulan tempDate
+    const isInCurrentWeek = dateStr >= weekStartStr && dateStr <= weekEndStr;
+
+    // Hitung akumulasi bulanan sampai dengan tanggal tempDate
     const startOfMonth = new Date(tempDate.getFullYear(), tempDate.getMonth(), 1);
     let currentMonthQuotaCounter = 0;
     
-    // Sub-loop untuk menghitung jatah izin bulanan hingga tanggal berjalan (dateStr)
     const quotaPtr = new Date(startOfMonth);
     while (quotaPtr <= tempDate) {
       const qDateStr = toLocalDateString(quotaPtr);
@@ -101,21 +101,22 @@ export const calculateWeeklyPayroll = (
       quotaPtr.setDate(quotaPtr.getDate() + 1);
     }
 
-    const record = dailyRecordsMap.get(dateStr);
-    const isInCurrentWeek = dateStr >= weekStartStr && dateStr <= weekEndStr;
+    // Selalu update monthlyAbsentCounter ke nilai terbaru dari loop penanda kuota
+    // agar di laporan akhir, angkanya sesuai dengan akumulasi real-time bulan itu
+    if (tempDate.getMonth() === weekEnd.getMonth()) {
+      monthlyAbsentCounter = currentMonthQuotaCounter;
+    }
 
+    const record = dailyRecordsMap.get(dateStr);
     const isActuallyAbsent = record?.status === 'ABSENT';
     const isApprovedLeave = record?.status === 'LEAVE';
     const isPendingLeave = record?.status === 'LEAVE_PENDING';
 
     if (isActuallyAbsent || isApprovedLeave || isPendingLeave) {
-      // monthlyAbsentCounter di laporan mingguan biasanya menunjukkan akumulasi bulan berjalan saat weekEnd
-      // Tapi kita gunakan currentMonthQuotaCounter untuk logika potongan per hari
-      
       if (isInCurrentWeek) {
         weekLeave++;
         
-        // Deduction logic only for finalized statuses
+        // Logika pemotongan gaji (hanya untuk status final: ABSENT atau LEAVE)
         if (isActuallyAbsent || isApprovedLeave) {
           if (isDwi) {
             if (currentMonthQuotaCounter <= 3) {
@@ -125,22 +126,19 @@ export const calculateWeeklyPayroll = (
               excessLeaveCountThisWeek++;
             }
           } else if (isMega) {
+            // Bu Mega: 3 hari pertama izin/absen dalam sebulan gratis, setelahnya potong 55rb
             if (currentMonthQuotaCounter > 3) {
               totalDeductionsThisWeek += 55000;
               excessLeaveCountThisWeek++;
             }
           } else {
+            // Karyawan Umum: Jatah 3 hari, selebihnya potong harian
             if (currentMonthQuotaCounter > FREE_LEAVE_QUOTA) {
               totalDeductionsThisWeek += dailyRateForDeduction;
               excessLeaveCountThisWeek++;
             }
           }
         }
-      }
-      
-      // Update monthly counter untuk report (berdasarkan bulan akhir minggu ini)
-      if (tempDate.getMonth() === weekEnd.getMonth()) {
-        monthlyAbsentCounter = currentMonthQuotaCounter;
       }
     } else if (record?.status === 'PRESENT' && isInCurrentWeek) {
       weekPresent++;
