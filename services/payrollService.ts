@@ -33,11 +33,19 @@ export const calculateWeeklyPayroll = (
   const isDaily30 = user.payrollMethod === PayrollMethod.DAILY_30;
   
   let weeklyBase = 0;
-  let methodLabel = isDaily30 ? 'Harian (Bagi 30)' : 'Mingguan (Bagi 4)';
+  let methodLabel = isDaily30 ? 'Harian (Bagi 30)' : 'Mingguan';
   let dailyRateForDeduction = 0;
 
   if (isDwi) {
-    weeklyBase = 515000;
+    // Rumus khusus Mba Dwi: 
+    // Gapok (1.5jt) dibagi jumlah hari bulan ini, Uang Makan (600rb) dibagi 30 (tetap Rp 20rb/hari)
+    const daysInCurrentMonth = new Date(weekStart.getFullYear(), weekStart.getMonth() + 1, 0).getDate();
+    const dailyGapok = user.gapok / daysInCurrentMonth;
+    const dailyUangMakan = user.uangMakan / 30; 
+    const weeklyBaseRaw = (dailyGapok + dailyUangMakan) * 7;
+    
+    // Pembulatan ke atas ke puluhan terdekat (contoh: 478.709 -> 478.710)
+    weeklyBase = Math.ceil(weeklyBaseRaw / 10) * 10;
     dailyRateForDeduction = 20000; 
   } else if (isMega) {
     weeklyBase = user.gapok / 4;

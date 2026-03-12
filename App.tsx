@@ -114,7 +114,11 @@ const App: React.FC = () => {
       const { data: adjData } = await supabase.from('payroll_adjustments').select('*');
       if (adjData) {
         setPayrollAdjustments(adjData.reduce((acc: any, curr: any) => {
-          acc[curr.user_id] = { bonus: Number(curr.bonus), deduction: Number(curr.deduction) };
+          acc[curr.user_id] = { 
+            bonus: Number(curr.bonus), 
+            deduction: Number(curr.deduction),
+            notes: curr.notes || ''
+          };
           return acc;
         }, {}));
       }
@@ -285,10 +289,15 @@ const App: React.FC = () => {
     await supabase.from('config').upsert([{ id: 1, latitude: config.latitude, longitude: config.longitude, radius: config.radius, clock_in_time: config.clockInTime, clock_out_time: config.clockOutTime }]);
   };
 
-  const handleUpdateAdjustment = async (userId: string, field: 'bonus' | 'deduction', value: number) => {
-    const updated = { ...(payrollAdjustments[userId] || { bonus: 0, deduction: 0 }), [field]: value };
+  const handleUpdateAdjustment = async (userId: string, field: 'bonus' | 'deduction' | 'notes', value: any) => {
+    const updated = { ...(payrollAdjustments[userId] || { bonus: 0, deduction: 0, notes: '' }), [field]: value };
     setPayrollAdjustments(prev => ({ ...prev, [userId]: updated }));
-    await supabase.from('payroll_adjustments').upsert({ user_id: userId, bonus: updated.bonus, deduction: updated.deduction }, { onConflict: 'user_id' });
+    await supabase.from('payroll_adjustments').upsert({ 
+      user_id: userId, 
+      bonus: updated.bonus, 
+      deduction: updated.deduction,
+      notes: updated.notes
+    }, { onConflict: 'user_id' });
   };
 
   if (!currentUser) {

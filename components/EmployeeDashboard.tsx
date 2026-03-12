@@ -13,7 +13,7 @@ interface EmployeeDashboardProps {
   onClockIn: (lat: number, lng: number) => void;
   onClockOut: () => void;
   onSubmitLeave: (date: string, reason: string, photo?: string) => void;
-  payrollAdjustments: { bonus: number, deduction: number };
+  payrollAdjustments: { bonus: number, deduction: number, notes?: string };
 }
 
 const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
@@ -158,10 +158,21 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
       styles: { fontSize: 9 }
     });
     
-    const finalY = (doc as any).lastAutoTable.finalY + 15;
+    let finalY = (doc as any).lastAutoTable.finalY + 15;
     doc.setFontSize(14);
     doc.setFont("helvetica", "bold");
     doc.text("TOTAL DITERIMA: Rp " + report.netSalary.toLocaleString('id-ID'), 14, finalY);
+    
+    if (payrollAdjustments.notes) {
+      finalY += 15;
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      doc.text("CATATAN TAMBAHAN:", 14, finalY);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      const splitNotes = doc.splitTextToSize(payrollAdjustments.notes, 180);
+      doc.text(splitNotes, 14, finalY + 7);
+    }
     
     doc.save(`slip_damdam_${user.username}_${report.weekEndDate}.pdf`);
   };
@@ -242,6 +253,12 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({
                     <p className="text-red-400">Rp {payrollSummary.deductions.toLocaleString('id-ID')}</p>
                   </div>
                </div>
+               {payrollAdjustments.notes && (
+                 <div className="mt-4 p-3 bg-white/5 rounded-xl border border-white/10">
+                   <p className="text-[8px] font-black uppercase opacity-60 mb-1">Catatan Owner:</p>
+                   <p className="text-[9px] font-medium leading-relaxed italic">{payrollAdjustments.notes}</p>
+                 </div>
+               )}
                {payrollSummary.manualDeduction > 0 && (
                  <p className="text-[8px] font-black text-indigo-400 mt-3 uppercase tracking-wider">
                    Termasuk Potongan Kasbon: Rp {payrollSummary.manualDeduction.toLocaleString('id-ID')}

@@ -17,7 +17,7 @@ interface OwnerDashboardProps {
   onEditEmployee: (user: User) => void;
   onDeleteEmployee: (userId: string) => void;
   payrollAdjustments: Record<string, { bonus: number, deduction: number }>;
-  onUpdateAdjustment: (userId: string, field: 'bonus' | 'deduction', value: number) => void;
+  onUpdateAdjustment: (userId: string, field: 'bonus' | 'deduction' | 'notes', value: any) => void;
   onUpdateKasbon: (userId: string, amount: number) => void;
   onRefreshData?: () => void;
 }
@@ -123,6 +123,7 @@ const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
     const report = getPayrollForUser(emp);
     if (!report) return alert("Pilih tanggal periode terlebih dahulu!");
     
+    const adj = payrollAdjustments[emp.id] || { bonus: 0, deduction: 0, notes: '' };
     const { jsPDF } = (window as any).jspdf;
     const doc = new jsPDF();
     
@@ -158,10 +159,21 @@ const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
       headStyles: { fillColor: [79, 70, 229] },
     });
     
-    const finalY = (doc as any).lastAutoTable.finalY + 15;
+    let finalY = (doc as any).lastAutoTable.finalY + 15;
     doc.setFontSize(14);
     doc.setFont("helvetica", "bold");
     doc.text("TOTAL DITERIMA: Rp " + report.netSalary.toLocaleString('id-ID'), 14, finalY);
+    
+    if (adj.notes) {
+      finalY += 15;
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      doc.text("CATATAN TAMBAHAN:", 14, finalY);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      const splitNotes = doc.splitTextToSize(adj.notes, 180);
+      doc.text(splitNotes, 14, finalY + 7);
+    }
     
     doc.save(`slip_${emp.username}_${report.weekEndDate}.pdf`);
   };
@@ -375,7 +387,7 @@ const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
               const report = getPayrollForUser(emp);
               if (!report) return null;
               
-              const adj = payrollAdjustments[emp.id] || { bonus: 0, deduction: 0 };
+              const adj = payrollAdjustments[emp.id] || { bonus: 0, deduction: 0, notes: '' };
               return (
                 <div key={emp.id} className="p-10 bg-white border border-slate-100 rounded-[40px] shadow-sm hover:shadow-xl transition-all duration-300 space-y-8">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
@@ -405,6 +417,15 @@ const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                         <button onClick={() => handlePayKasbon(emp.id)} className="bg-red-500 hover:bg-red-600 text-white px-6 py-5 rounded-2xl font-black text-[10px] uppercase shadow-lg transition-all active:scale-95">Bayar Kasbon</button>
                       </div>
                     </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Catatan Tambahan (Muncul di Slip)</label>
+                    <textarea 
+                      value={adj.notes || ''} 
+                      placeholder="Contoh: 1. Uang bonus sudah cair, 2. Cari 10x" 
+                      className="w-full p-5 bg-slate-50 rounded-2xl font-bold text-sm outline-none min-h-[100px] resize-none" 
+                      onChange={(e) => onUpdateAdjustment(emp.id, 'notes', e.target.value)}
+                    />
                   </div>
                   <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100/50">
                     <p className="text-[10px] font-bold text-indigo-700 leading-relaxed uppercase tracking-tight">
